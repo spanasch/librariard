@@ -58,16 +58,27 @@ button {
   width: 100%;
   height: auto;
 }
+#account-form button {
+  width: 100%;
+  margin-top: 1rem;
+}
+#account-form {
+  max-width: 400px;
+  margin: 1rem auto;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+#account-form .form-group {
+  margin-bottom: 1.5rem;
+}
 #account-form label {
   display: block;
-  margin-bottom: 0.5rem;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
 }
 #account-form input {
   width: 100%;
   padding: 0.5rem;
   box-sizing: border-box;
-}
-#account-form button {
-  width: 100%;
-  margin-top: 1rem;
 }

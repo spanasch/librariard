@@ -20,24 +20,27 @@
     <div id="account-form-view" class="view hidden">
       <button id="back-to-main-1">← Back</button>
       <h2>Add Account</h2>
-      <form id="account-form">
-        <div class="form-group">
-          <label for="displayName">Display Name</label>
-          <input id="displayName" name="displayName" required />
-        </div>
-        <div class="form-group">
-          <label for="cardNumber">Card Number</label>
-          <input id="cardNumber" name="cardNumber" required />
-        </div>
-        <div class="form-group">
-          <label for="pin">PIN</label>
-          <input id="pin" name="pin" required />
-        </div>
-        <div class="form-group">
-          <label for="accountId">Account ID</label>
-          <input id="accountId" name="accountId" required />
-        </div>
-        <button type="submit">Save</button>
+      <div class="form-group">
+        <label for="displayName">Display Name</label>
+        <input id="displayName" name="displayName"
+               placeholder="What you’ll call this card">
+      </div>
+      <div class="form-group">
+        <label for="cardNumber">Card Number</label>
+        <input id="cardNumber" name="cardNumber"
+               placeholder="Library card number">
+      </div>
+      <div class="form-group">
+        <label for="pin">PIN</label>
+        <input id="pin" name="pin"
+               placeholder="4-digit PIN">
+      </div>
+      <div class="form-group">
+        <label for="accountId">Account ID</label>
+        <input id="accountId" name="accountId"
+               placeholder="Account ID from API">
+      </div>
+      <button type="submit">Save</button>
       </form>
     </div>
 

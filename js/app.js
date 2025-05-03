@@ -64,8 +64,13 @@ $('#accounts-list').addEventListener('click', e => {
 
 // ── Fetch & render checkouts ─────────────────────────────────────────────────
 async function fetchCheckoutsViaProxy(acct) {
-  const q = new URLSearchParams(acct).toString();
-  const res = await fetch(`/.netlify/functions/getCheckouts?${q}`);
+  const query = new URLSearchParams({
+    name:      acct.cardNumber,
+    user_pin:  acct.pin,
+    accountId: acct.accountId
+  }).toString();
+
+  const res = await fetch(`/.netlify/functions/getCheckouts?${query}`);
   return res.json();
 }
 
