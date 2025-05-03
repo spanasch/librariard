@@ -63,21 +63,10 @@ $('#accounts-list').addEventListener('click', e => {
 });
 
 // ── Fetch & render checkouts ─────────────────────────────────────────────────
-async function loginFetch(account) {
-  // login
-  await fetch(LOGIN_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: new URLSearchParams({
-      name: account.cardNumber,
-      user_pin: account.pin
-    })
-  });
-  // fetch checkouts
-  const resp = await fetch(`${CHECKOUTS_URL}?accountId=${account.accountId}&size=100&page=1&status=OUT&sort=status&locale=en-US`, {
-    headers:{'Accept':'application/json'}
-  });
-  return resp.json();
+async function fetchCheckoutsViaProxy(acct) {
+  const q = new URLSearchParams(acct).toString();
+  const res = await fetch(`/.netlify/functions/getCheckouts?${q}`);
+  return res.json();
 }
 
 function processBooks(json) {
@@ -107,7 +96,7 @@ $('#see-checkouts-btn').addEventListener('click', async () => {
   try {
     const allBooks = [];
     for (let acct of getAccounts()) {
-      const json = await loginFetch(acct);
+      const json = await fetchCheckoutsViaProxy(acct);
       allBooks.push(...processBooks(json));
     }
     allBooks.sort((a,b)=>a.realDue - b.realDue);
