@@ -21,6 +21,9 @@ exports.handler = async (event) => {
     body: new URLSearchParams({ name, user_pin })
   });
 
+  const cookies = await jar.getCookies("https://aclibrary.bibliocommons.com");
+  console.log("Cookies after login:", cookies.map(c => c.cookieString()).join("; "));
+
   const loginBody = await loginResp.text();
   if (!loginResp.ok || loginBody.includes("Login") || loginBody.includes("incorrect")) {
     return {
