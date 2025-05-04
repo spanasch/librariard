@@ -51,6 +51,8 @@ exports.handler = async (event) => {
   return {
     statusCode: 200,
     headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify(data),
+    // body: JSON.stringify(data),
+    body: JSON.stringify({ debug: "cookies", cookies: cookies.map(c => c.cookieString()) })
   };
+  
 };
