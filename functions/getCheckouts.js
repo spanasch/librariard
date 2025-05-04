@@ -42,7 +42,8 @@ exports.handler = async (event) => {
     const text = await resp.text();
     return {
       statusCode: resp.status,
-      body: JSON.stringify({ error: "Failed to fetch checkouts", detail: text }),
+      // body: JSON.stringify({ error: "Failed to fetch checkouts", detail: text }),
+      body: JSON.stringify({ debug: "cookies", cookies: cookies.map(c => c.cookieString()) })
     };
   }
 
@@ -51,8 +52,7 @@ exports.handler = async (event) => {
   return {
     statusCode: 200,
     headers: { 'Access-Control-Allow-Origin': '*' },
-    // body: JSON.stringify(data),
-    body: JSON.stringify({ debug: "cookies", cookies: cookies.map(c => c.cookieString()) })
+    body: JSON.stringify(data)
   };
   
 };
