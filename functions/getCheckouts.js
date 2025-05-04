@@ -21,9 +21,6 @@ exports.handler = async (event) => {
     body: new URLSearchParams({ name, user_pin })
   });
 
-  const cookies = await jar.getCookies("https://aclibrary.bibliocommons.com");
-  console.log("Cookies after login:", cookies.map(c => c.cookieString()).join("; "));
-
   const loginBody = await loginResp.text();
   if (!loginResp.ok || loginBody.includes("Login") || loginBody.includes("incorrect")) {
     return {
@@ -34,16 +31,25 @@ exports.handler = async (event) => {
 
   // 2️⃣ Fetch checkouts
   const url = `${CHECKOUTS_URL}?accountId=${accountId}&size=100&page=1&status=OUT&sort=status&locale=en-US`;
-  const resp = await fetchWithCookies(url, {
-    headers: { Accept: 'application/json' }
+  // Get all cookies for bibliocommons
+  const allCookies = await jar.getCookies("https://aclibrary.bibliocommons.com");
+
+  // Manually construct a cookie header string
+  const cookieHeader = allCookies.map(c => c.cookieString()).join("; ");
+
+  // Now send checkouts request with explicit Cookie header
+  const resp = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      Cookie: cookieHeader
+    }
   });
 
   if (!resp.ok) {
     const text = await resp.text();
     return {
       statusCode: resp.status,
-      // body: JSON.stringify({ error: "Failed to fetch checkouts", detail: text }),
-      body: JSON.stringify({ debug: "cookies", cookies: cookies.map(c => c.cookieString()) })
+      body: JSON.stringify({ error: "Failed to fetch checkouts", detail: text })
     };
   }
 
@@ -54,5 +60,5 @@ exports.handler = async (event) => {
     headers: { 'Access-Control-Allow-Origin': '*' },
     body: JSON.stringify(data)
   };
-  
+
 };
