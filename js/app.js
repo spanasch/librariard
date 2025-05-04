@@ -70,7 +70,7 @@ async function fetchCheckoutsViaProxy(acct) {
     accountId: acct.accountId
   }).toString();
 
-  const res = await fetch(`/.netlify/functions/getCheckouts?${query}`);
+  const res = await fetch(`/.netlify/functions/get_checkouts?${query}`);
   return res.json();
 }
 
