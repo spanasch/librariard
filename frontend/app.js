@@ -70,7 +70,9 @@ async function fetchCheckoutsViaProxy(acct) {
     accountId: acct.accountId
   }).toString();
 
-  const res = await fetch(`/.netlify/functions/get_checkouts?${query}`);
+  const backendUrl = window.BACKEND_URL || "http://localhost:5000"; // fallback for local dev
+  const res = await fetch(`${backendUrl}/checkouts?${query}`);
+
   return res.json();
 }
 
