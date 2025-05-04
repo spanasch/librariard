@@ -1,7 +1,2 @@
-# netlify.toml
-
 [build]
-  # directory where published site lives
   publish = "."
-  # folder where serverless functions live
-  functions = "functions"
