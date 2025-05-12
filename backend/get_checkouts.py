@@ -37,9 +37,9 @@ def handle_checkout(params):
             params={
                 "accountId": account_id,
                 "size": 100,
-                "status": "OUT",
                 "page": 1,
                 "sort": "status",
+                "materialType": "PHYSICAL",
                 "locale": "en-US"
             }
         )
