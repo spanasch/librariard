@@ -1,7 +1,7 @@
 /*
   Librariard PWA - app.js
   Updated to use IndexedDB for caching checkouts once per day,
-  with manual refresh support
+  with manual refresh support and styled book cards
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -56,7 +56,6 @@ function renderAccounts() {
     ul.appendChild(li);
   });
 }
-
 $('#accounts-list').addEventListener('click', e => {
   if (e.target.matches('button')) {
     const idx   = +e.target.dataset.index;
@@ -173,7 +172,7 @@ function extractRawBooks(json, acct) {
       timesRenewed:  chk.timesRenewed || 0,
       dueDate:       chk.dueDate,
       title:         meta.title,
-      cover:         meta.jacket.medium
+      cover:         meta.jacket.medium   
     });
   }
   return arr;
@@ -188,10 +187,11 @@ function processRaw(rec) {
 
   return {
     ...rec,
-    renewLabel: renewsLeft ? `+${renewsLeft * 3}wk` : '',
+    renewsLeft,
     realDue:    realDueMs,
     dueSoon:    (realDueMs - todayMs) < 7 * 24 * 3600 * 1000,
-    dueDate:    dueDateObj.toLocaleDateString()
+    overdue:    realDueMs < todayMs,
+    dueDate:    dueDateObj.toISOString().split('T')[0]   
   };
 }
 
@@ -223,15 +223,29 @@ async function loadAndRenderCheckouts({ force = false } = {}) {
       .map(processRaw)
       .sort((a, b) => a.realDue - b.realDue);
 
-    grid.innerHTML = books.map((b, i) => `
-      <div class="book-card">
-        <h2>${i + 1}. ${b.title}</h2>
-        <div class="due" style="color:${b.dueSoon ? 'red' : 'black'}">
-          ${b.dueDate}${b.renewLabel ? ` <em>${b.renewLabel}</em>` : ''}
+    grid.innerHTML = books.map((b, i) => {
+      const headerColor = b.overdue
+        ? 'darkred'
+        : b.dueSoon
+          ? 'red'
+          : 'black';
+      return `
+        <div class="book-card">
+          <div class="card-header" style="background-color:${headerColor}; color:white;">
+            <div class="header-left">
+              <span class="index">${i + 1}</span>
+              <span class="date">${b.dueDate}</span>
+            </div>
+            ${b.renewsLeft ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : ''}
+          </div>
+          <div class="card-body">
+            <img src="${b.cover}" alt="Cover of ${b.title}">
+            <h2>${b.title}</h2>
+          </div>
         </div>
-        <img src="${b.cover}" alt="Cover of ${b.title}">
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
   } catch (err) {
     grid.textContent = 'Error loading checkouts.';
     console.error(err);

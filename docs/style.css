@@ -82,3 +82,56 @@ button {
   padding: 0.5rem;
   box-sizing: border-box;
 }
+
+.book-card {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1em;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em;
+}
+
+.card-header .header-left {
+  display: flex;
+  align-items: center;
+}
+
+.card-header .index {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.2em 0.5em;
+  border-radius: 2px;
+  margin-right: 0.5em;
+}
+
+.card-header .date {
+  /* no extra styling needed; inherits white text */
+}
+
+.card-header .badge {
+  background: rgba(255, 255, 255, 0.3);
+  padding: 0.2em 0.6em;
+  border-radius: 12px;
+  font-size: 0.9em;
+}
+
+.card-body {
+  padding: 0.5em;
+}
+
+.book-card img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin-bottom: 0.5em;
+}
+
+.book-card h2 {
+  margin: 0;
+  font-size: 1em;
+}
