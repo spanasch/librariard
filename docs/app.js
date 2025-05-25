@@ -4,7 +4,7 @@
   with automatic clear-before-write and rendering from the DB.
 */
 
-const LOGIN_URL   = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
+const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
 const CHECKOUTS_URL = "https://gateway.bibliocommons.com/v2/libraries/aclibrary/checkouts";
 
 // ── View helpers ─────────────────────────────────────────────────────────────
@@ -13,6 +13,27 @@ const show = id => {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
   $(id).classList.remove('hidden');
 };
+
+// ── Navigation & Form handlers ────────────────────────────────────────────────
+$('#add-account-btn').addEventListener('click', () => show('#account-form-view'));
+$('#back-to-main-1').addEventListener('click', () => show('#main-view'));
+$('#back-to-main-2').addEventListener('click', () => show('#main-view'));
+$('#account-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target;
+  const newAcct = {
+    displayName: f.displayName.value,
+    cardNumber:  f.cardNumber.value,
+    pin:         f.pin.value,
+    accountId:   f.accountId.value
+  };
+  const accts = getAccounts();
+  accts.push(newAcct);
+  saveAccounts(accts);
+  f.reset();
+  renderAccounts();
+  show('#main-view');
+});
 
 // ── LocalStorage accounts ────────────────────────────────────────────────────
 function getAccounts() {
@@ -32,14 +53,14 @@ function renderAccounts() {
       <span>${acct.displayName || acct.accountId}</span>
       <button data-index="${i}">Delete</button>
     `;
-    ul.append(li);
+    ul.appendChild(li);
   });
 }
 
 $('#accounts-list').addEventListener('click', e => {
   if (e.target.matches('button')) {
-    const idx    = +e.target.dataset.index;
-    const accts  = getAccounts();
+    const idx   = +e.target.dataset.index;
+    const accts = getAccounts();
     accts.splice(idx, 1);
     saveAccounts(accts);
     renderAccounts();
@@ -60,10 +81,10 @@ async function fetchCheckoutsViaProxy(acct) {
 }
 
 // ── IndexedDB configuration ──────────────────────────────────────────────────
-const DB_NAME        = 'librariardDB';
-const DB_VERSION     = 1;
+const DB_NAME         = 'librariardDB';
+const DB_VERSION      = 1;
 const STORE_CHECKOUTS = 'checkouts';
-const STORE_META     = 'meta';
+const STORE_META      = 'meta';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -104,9 +125,9 @@ function setMeta(db, key, value) {
 
 function clearStore(db, name) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(name, 'readwrite');
+    const tx    = db.transaction(name, 'readwrite');
     const store = tx.objectStore(name);
-    const r = store.clear();
+    const r     = store.clear();
     r.onsuccess = () => resolve();
     r.onerror   = () => reject(r.error);
   });
@@ -140,7 +161,7 @@ function isSameDay(isoDateStr) {
          d1.getDate()     === d2.getDate();
 }
 
-// Extracts the raw fields used later for calculation
+// ── Data extraction & processing ─────────────────────────────────────────────
 function extractRawBooks(json, acct) {
   const arr = [];
   for (const chk of Object.values(json.entities.checkouts)) {
@@ -150,21 +171,19 @@ function extractRawBooks(json, acct) {
       accountId:     acct.accountId,
       metadataId:    chk.metadataId,
       timesRenewed:  chk.timesRenewed || 0,
-      dueDate:       chk.dueDate,        // ISO string from backend
+      dueDate:       chk.dueDate,
       title:         meta.title,
-      cover:         meta.cover
+      cover:         meta.jacket.medium   // use the proper cover path
     });
   }
   return arr;
 }
 
-// Recalculate everything that might change over time
 function processRaw(rec) {
-  const MAX_RENEWS = 2;
-  const todayMs    = Date.now();
-  const dueDateObj = new Date(rec.dueDate);
-  const timesRenewed = rec.timesRenewed;
-  const renewsLeft = Math.max(0, MAX_RENEWS - timesRenewed);
+  const MAX_RENEWS  = 2;
+  const todayMs     = Date.now();
+  const dueDateObj  = new Date(rec.dueDate);
+  const renewsLeft  = Math.max(0, MAX_RENEWS - (rec.timesRenewed || 0));
   const realDueMs   = dueDateObj.getTime() + renewsLeft * 21 * 24 * 3600 * 1000;
 
   return {
