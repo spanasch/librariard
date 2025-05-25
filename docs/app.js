@@ -1,7 +1,6 @@
 /*
   Librariard PWA - app.js
-  Updated to use IndexedDB for caching checkouts once per day,
-  with manual refresh support and styled book cards
+  Updated: display calculated real due date, new header colors, formatted dates, and overdue badge
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -172,26 +171,34 @@ function extractRawBooks(json, acct) {
       timesRenewed:  chk.timesRenewed || 0,
       dueDate:       chk.dueDate,
       title:         meta.title,
-      cover:         meta.jacket.medium   
+      cover:         meta.jacket.medium
     });
   }
   return arr;
 }
 
 function processRaw(rec) {
-  const MAX_RENEWS  = 2;
-  const todayMs     = Date.now();
-  const dueDateObj  = new Date(rec.dueDate);
-  const renewsLeft  = Math.max(0, MAX_RENEWS - (rec.timesRenewed || 0));
-  const realDueMs   = dueDateObj.getTime() + renewsLeft * 21 * 24 * 3600 * 1000;
+  const MAX_RENEWS    = 2;
+  const todayMs       = Date.now();
+  const originalDue   = new Date(rec.dueDate).getTime();
+  const renewsLeft    = Math.max(0, MAX_RENEWS - (rec.timesRenewed || 0));
+  const realDueMs     = originalDue + renewsLeft * 21 * 24 * 3600 * 1000;
+  const diffMs        = realDueMs - todayMs;
+  const dueWithinWeek = diffMs >= 0 && diffMs < 7 * 24 * 3600 * 1000;
+  const dueWithin2Wks = diffMs >= 0 && diffMs < 14 * 24 * 3600 * 1000;
+  const realDueDate   = new Date(realDueMs);
+
+  // format as M/D
+  const fmtDate       = `${realDueDate.getMonth()+1}/${realDueDate.getDate()}`;
 
   return {
     ...rec,
     renewsLeft,
-    realDue:    realDueMs,
-    dueSoon:    (realDueMs - todayMs) < 7 * 24 * 3600 * 1000,
-    overdue:    realDueMs < todayMs,
-    dueDate:    dueDateObj.toISOString().split('T')[0]   
+    realDueMs,
+    overdue:    diffMs < 0,
+    dueWithinWeek,
+    dueWithin2Wks,
+    displayDate: fmtDate
   };
 }
 
@@ -221,22 +228,33 @@ async function loadAndRenderCheckouts({ force = false } = {}) {
 
     const books = rawRecords
       .map(processRaw)
-      .sort((a, b) => a.realDue - b.realDue);
+      .sort((a, b) => a.realDueMs - b.realDueMs);
 
     grid.innerHTML = books.map((b, i) => {
+      // header color logic
       const headerColor = b.overdue
         ? 'darkred'
-        : b.dueSoon
-          ? 'red'
-          : 'black';
+        : b.dueWithinWeek
+          ? 'darkorange'
+          : b.dueWithin2Wks
+            ? 'darkblue'
+            : 'black';
+
+      // badge: exclamation if overdue, else renew count if >0
+      const badge = b.overdue
+        ? '<span class="badge">!</span>'
+        : (b.renewsLeft > 0)
+          ? `<span class="badge">Renews: ${b.renewsLeft}</span>`
+          : '';
+
       return `
         <div class="book-card">
           <div class="card-header" style="background-color:${headerColor}; color:white;">
             <div class="header-left">
               <span class="index">${i + 1}</span>
-              <span class="date">${b.dueDate}</span>
+              <span class="date">${b.displayDate}</span>
             </div>
-            ${b.renewsLeft ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : ''}
+            ${badge}
           </div>
           <div class="card-body">
             <img src="${b.cover}" alt="Cover of ${b.title}">
