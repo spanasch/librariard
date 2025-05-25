@@ -1,7 +1,7 @@
 /*
   Librariard PWA - app.js
   Updated to use IndexedDB for caching checkouts once per day,
-  with automatic clear-before-write and rendering from the DB.
+  with manual refresh support
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -173,7 +173,7 @@ function extractRawBooks(json, acct) {
       timesRenewed:  chk.timesRenewed || 0,
       dueDate:       chk.dueDate,
       title:         meta.title,
-      cover:         meta.jacket.medium   // use the proper cover path
+      cover:         meta.jacket.medium
     });
   }
   return arr;
@@ -195,8 +195,8 @@ function processRaw(rec) {
   };
 }
 
-// ── Fetch & render (with IndexedDB) ────────────────────────────────────────
-$('#see-checkouts-btn').addEventListener('click', async () => {
+// ── Load & render checkouts ───────────────────────────────────────────────────
+async function loadAndRenderCheckouts({ force = false } = {}) {
   show('#checkouts-view');
   const grid = $('#books-grid');
   grid.innerHTML = 'Loading…';
@@ -206,7 +206,7 @@ $('#see-checkouts-btn').addEventListener('click', async () => {
     const lastFetch = await getMeta(db, 'lastFetchedDate');
     let rawRecords;
 
-    if (lastFetch && isSameDay(lastFetch)) {
+    if (!force && lastFetch && isSameDay(lastFetch)) {
       rawRecords = await getAllRaw(db);
     } else {
       rawRecords = [];
@@ -232,12 +232,14 @@ $('#see-checkouts-btn').addEventListener('click', async () => {
         <img src="${b.cover}" alt="Cover of ${b.title}">
       </div>
     `).join('');
-
   } catch (err) {
     grid.textContent = 'Error loading checkouts.';
     console.error(err);
   }
-});
+}
+
+$('#see-checkouts-btn').addEventListener('click', () => loadAndRenderCheckouts());
+$('#refresh-btn').addEventListener('click', () => loadAndRenderCheckouts({ force: true }));
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 renderAccounts();
