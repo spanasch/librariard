@@ -5,7 +5,8 @@
     - If originalDue < today, realDue = originalDue
     - Sort on realDue
     - Show both overdue (!) and renew badges when applicable
-    - Clear "Loading..." before rendering, and update loading message per account
+    - Improve loading messages per account
+    - Toggle detail view on tap/click ignoring drags
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -49,7 +50,8 @@ function saveAccounts(accts) {
 
 // ── Render accounts list ─────────────────────────────────────────────────────
 function renderAccounts() {
-  const ul = $('#accounts-list'); ul.innerHTML = '';
+  const ul = $('#accounts-list');
+  ul.innerHTML = '';
   getAccounts().forEach((acct, i) => {
     const li = document.createElement('li');
     li.innerHTML = `
@@ -61,135 +63,260 @@ function renderAccounts() {
 }
 $('#accounts-list').addEventListener('click', e => {
   if (e.target.matches('button')) {
-    const idx = +e.target.dataset.index;
-    const accts = getAccounts(); accts.splice(idx, 1);
-    saveAccounts(accts); renderAccounts();
+    const idx   = +e.target.dataset.index;
+    const accts = getAccounts();
+    accts.splice(idx, 1);
+    saveAccounts(accts);
+    renderAccounts();
   }
 });
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 async function fetchCheckoutsViaProxy(acct) {
   const query = new URLSearchParams({
-    name: acct.cardNumber, user_pin: acct.pin, accountId: acct.accountId
+    name:      acct.cardNumber,
+    user_pin:  acct.pin,
+    accountId: acct.accountId
   }).toString();
+
   const backendUrl = window.BACKEND_URL || "http://localhost:5000";
-  const res = await fetch(`${backendUrl}/checkouts?${query}`);
+  const res        = await fetch(`${backendUrl}/checkouts?${query}`);
   return res.json();
 }
 
 // ── IndexedDB setup ──────────────────────────────────────────────────────────
-const DB_NAME='librariardDB', DB_VERSION=1;
-const STORE_CHECKOUTS='checkouts', STORE_META='meta';
-function openDB(){return new Promise((res,rej)=>{const rq=indexedDB.open(DB_NAME,DB_VERSION);
-  rq.onupgradeneeded=e=>{const db=e.target.result;
-    if(!db.objectStoreNames.contains(STORE_CHECKOUTS)) db.createObjectStore(STORE_CHECKOUTS,{keyPath:'id'});
-    if(!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META,{keyPath:'key'});
-  };
-  rq.onsuccess=e=>res(e.target.result);
-  rq.onerror=e=>rej(e.target.error);
-});}
-function getMeta(db,key){return new Promise((res,rej)=>{const tx=db.transaction(STORE_META,'readonly');const st=tx.objectStore(STORE_META);const r=st.get(key);
-  r.onsuccess=()=>res(r.result? r.result.value:null);
-  r.onerror=()=>rej(r.error);
-});}
-function setMeta(db,key,val){return new Promise((res,rej)=>{const tx=db.transaction(STORE_META,'readwrite');const st=tx.objectStore(STORE_META);const r=st.put({key,val});
-  r.onsuccess=()=>res();r.onerror=()=>rej(r.error);
-});}
-function clearStore(db,name){return new Promise((res,rej)=>{const tx=db.transaction(name,'readwrite');const st=tx.objectStore(name);const r=st.clear();
-  r.onsuccess=()=>res();r.onerror=()=>rej(r.error);
-});}
-function saveRawRecords(db,recs){return new Promise((res,rej)=>{const tx=db.transaction(STORE_CHECKOUTS,'readwrite');const st=tx.objectStore(STORE_CHECKOUTS);
-  recs.forEach(r=>st.put(r)); tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);
-});}
-function getAllRaw(db){return new Promise((res,rej)=>{const tx=db.transaction(STORE_CHECKOUTS,'readonly');const st=tx.objectStore(STORE_CHECKOUTS);const r=st.getAll();
-  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
-});}
-function isSameDay(iso){const d1=new Date(iso),d2=new Date();return d1.getFullYear()===d2.getFullYear()&&d1.getMonth()===d2.getMonth()&&d1.getDate()===d2.getDate();}
+const DB_NAME         = 'librariardDB';
+const DB_VERSION      = 1;
+const STORE_CHECKOUTS = 'checkouts';
+const STORE_META      = 'meta';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = evt => {
+      const db = evt.target.result;
+      if (!db.objectStoreNames.contains(STORE_CHECKOUTS)) {
+        db.createObjectStore(STORE_CHECKOUTS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_META)) {
+        db.createObjectStore(STORE_META, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = evt => resolve(evt.target.result);
+    req.onerror   = evt => reject(evt.target.error);
+  });
+}
+
+function getMeta(db, key) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE_META, 'readonly');
+    const store = tx.objectStore(STORE_META);
+    const r     = store.get(key);
+    r.onsuccess = () => resolve(r.result ? r.result.value : null);
+    r.onerror   = () => reject(r.error);
+  });
+}
+
+function setMeta(db, key, value) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE_META, 'readwrite');
+    const store = tx.objectStore(STORE_META);
+    const r     = store.put({ key, value });
+    r.onsuccess = () => resolve();
+    r.onerror   = () => reject(r.error);
+  });
+}
+
+function clearStore(db, name) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(name, 'readwrite');
+    const store = tx.objectStore(name);
+    const r     = store.clear();
+    r.onsuccess = () => resolve();
+    r.onerror   = () => reject(r.error);
+  });
+}
+
+function saveRawRecords(db, records) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE_CHECKOUTS, 'readwrite');
+    const store = tx.objectStore(STORE_CHECKOUTS);
+    for (const rec of records) store.put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+function getAllRaw(db) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE_CHECKOUTS, 'readonly');
+    const store = tx.objectStore(STORE_CHECKOUTS);
+    const r     = store.getAll();
+    r.onsuccess = () => resolve(r.result);
+    r.onerror   = () => reject(r.error);
+  });
+}
+
+function isSameDay(isoDateStr) {
+  const d1 = new Date(isoDateStr);
+  const d2 = new Date();
+  return d1.getFullYear() === d2.getFullYear() &&
+         d1.getMonth()    === d2.getMonth()    &&
+         d1.getDate()     === d2.getDate();
+}
 
 // ── Data extraction & processing ─────────────────────────────────────────────
-function extractRawBooks(json,acct){
-  const arr=[];
-  const acctName=acct.displayName||acct.accountId;
-  Object.values(json.entities.checkouts).forEach(chk=>{
-    const meta=json.entities.bibs[chk.metadataId].briefInfo;
+function extractRawBooks(json, acct) {
+  const arr = [];
+  const accountName = acct.displayName || acct.accountId;
+  Object.values(json.entities.checkouts).forEach(chk => {
+    const meta = json.entities.bibs[chk.metadataId].briefInfo;
     arr.push({
-      id:`${acct.accountId}_${chk.metadataId}`,accountId:acct.accountId,
-      accountName:acctName,metadataId:chk.metadataId,
-      timesRenewed:chk.timesRenewed||0,
-      dueDate:chk.dueDate,title:meta.title,cover:meta.jacket.medium
+      id:            `${acct.accountId}_${chk.metadataId}`,
+      accountId:     acct.accountId,
+      accountName,
+      metadataId:    chk.metadataId,
+      timesRenewed:  chk.timesRenewed || 0,
+      dueDate:       chk.dueDate,
+      title:         meta.title,
+      cover:         meta.jacket.medium
     });
   });
   return arr;
 }
-function processRaw(rec){
-  const MAX=2;const today=Date.now();
-  // parse originalDue as local Y-M-D
-  const [y,m,d]=rec.dueDate.split('T')[0].split('-').map(Number);
-  const origDateLocal=new Date(y,m-1,d).getTime();
-  const renewsLeft=Math.max(0,MAX-(rec.timesRenewed||0));
-  // if original due before today, keep that
-  const realDueMs=origDateLocal<today?origDateLocal:origDateLocal+renewsLeft*21*24*3600*1000;
-  const diff=realDueMs-today;
-  const week=7*24*3600*1000,two=14*24*3600*1000;
-  const d1=new Date(realDueMs);const dd=`${d1.getMonth()+1}/${d1.getDate()}`;
-  return {...rec,renewsLeft,realDueMs,
-    overdue:diff<0,dueWithinWeek:diff>=0&&diff<week,
-    dueWithin2Wks:diff>=week&&diff<two,displayDate:dd};
+
+function processRaw(rec) {
+  const MAX_RENEWS     = 2;
+  const todayMs        = Date.now();
+  const [y, m, d]      = rec.dueDate.split('T')[0].split('-').map(Number);
+  const originalMs     = new Date(y, m - 1, d).getTime();
+  const renewsLeft     = Math.max(0, MAX_RENEWS - rec.timesRenewed);
+  // if original is past, don't add renewals
+  const realDueMs      = originalMs < todayMs
+    ? originalMs
+    : originalMs + renewsLeft * 21 * 24 * 3600 * 1000;
+  const diffMs         = realDueMs - todayMs;
+  const weekMs         = 7 * 24 * 3600 * 1000;
+  const twoWeekMs      = 14 * 24 * 3600 * 1000;
+  const rd             = new Date(realDueMs);
+  const displayDate    = `${rd.getMonth() + 1}/${rd.getDate()}`;
+
+  return {
+    ...rec,
+    renewsLeft,
+    realDueMs,
+    overdue:        diffMs < 0,
+    dueWithinWeek:  diffMs >= 0 && diffMs < weekMs,
+    dueWithin2Wks:  diffMs >= weekMs && diffMs < twoWeekMs,
+    displayDate
+  };
 }
 
 // ── Templates ───────────────────────────────────────────────────────────────
-function summaryTemplate(b,i){
-  const color=b.overdue?'darkred':b.dueWithinWeek?'darkorange':b.dueWithin2Wks?'darkblue':'black';
-  const badges=[b.overdue?'<span class="badge">!</span>':'',
-                b.renewsLeft>0?`<span class="badge">Renews: ${b.renewsLeft}</span>`:''
-               ].join('');
-  return `<div class="card-header" style="background-color:${color};color:white;">
-    <div class="header-left"><span class="index">${i+1}</span><span class="date">${b.displayDate}</span></div>
-    ${badges}
-  </div><div class="card-body">
-    <img src="${b.cover}" alt="Cover of ${b.title}"><h2>${b.title}</h2>
-  </div>`;
+function summaryTemplate(b, idx) {
+  const headerColor = b.overdue
+    ? 'darkred'
+    : b.dueWithinWeek
+      ? 'darkorange'
+      : b.dueWithin2Wks
+        ? 'darkblue'
+        : 'black';
+  const badges = [
+    b.overdue ? '<span class="badge">!</span>' : '',
+    b.renewsLeft > 0 ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : ''
+  ].join('');
+  return `
+    <div class="card-header" style="background-color:${headerColor}; color:white;">
+      <div class="header-left">
+        <span class="index">${idx + 1}</span>
+        <span class="date">${b.displayDate}</span>
+      </div>
+      ${badges}
+    </div>
+    <div class="card-body">
+      <img src="${b.cover}" alt="Cover of ${b.title}">
+      <h2>${b.title}</h2>
+    </div>
+  `;
 }
-function detailTemplate(b){return `<div class="card-header" style="background-color:gray;color:white;">
-    <span>Details</span></div>
-  <div class="card-detail">
-    <p><strong>Title:</strong> ${b.title}</p>
-    <p><strong>Original Due:</strong> ${rec.dueDate.split('T')[0]}</p>
-    <p><strong>Real Due:</strong> ${b.displayDate}</p>
-    <p><strong>Renews Left:</strong> ${b.renewsLeft}</p>
-    <p><strong>Account:</strong> ${b.accountName}</p>
-  </div>`;}
+
+function detailTemplate(b) {
+  return `
+    <div class="card-header" style="background-color:gray; color:white;">
+      <span>Details</span>
+    </div>
+    <div class="card-detail">
+      <p><strong>Title:</strong> ${b.title}</p>
+      <p><strong>Original Due:</strong> ${b.dueDate.split('T')[0]}</p>
+      <p><strong>Real Due:</strong> ${b.displayDate}</p>
+      <p><strong>Renews Left:</strong> ${b.renewsLeft}</p>
+      <p><strong>Account:</strong> ${b.accountName}</p>
+    </div>
+  `;
+}
 
 // ── Load & render checkouts ───────────────────────────────────────────────────
-async function loadAndRenderCheckouts({force=false}={}){
+async function loadAndRenderCheckouts({ force = false } = {}) {
   show('#checkouts-view');
-  const grid=$('#books-grid');grid.innerHTML='';
-  try{
-    const db=await openDB();const last=await getMeta(db,'lastFetchedDate');
-    let raws=[];
-    if(!force&&last&&isSameDay(last)) raws=await getAllRaw(db);
-    else{ const accts=getAccounts();
-      for(const acct of accts){
-        grid.textContent=`Loading checkouts for ${acct.displayName||acct.accountId}…`;
-        const json=await fetchCheckoutsViaProxy(acct);
-        raws.push(...extractRawBooks(json,acct));
+  const grid = $('#books-grid');
+  grid.innerHTML = '';
+
+  try {
+    const db        = await openDB();
+    const lastFetch = await getMeta(db, 'lastFetchedDate');
+    let rawRecords  = [];
+
+    if (!force && lastFetch && isSameDay(lastFetch)) {
+      rawRecords = await getAllRaw(db);
+    } else {
+      const accts = getAccounts();
+      for (const acct of accts) {
+        grid.textContent = `Loading checkouts for ${acct.displayName || acct.accountId}…`;
+        const json = await fetchCheckoutsViaProxy(acct);
+        rawRecords.push(...extractRawBooks(json, acct));
       }
-      await clearStore(db,STORE_CHECKOUTS);
-      await setMeta(db,'lastFetchedDate',new Date().toISOString());
-      await saveRawRecords(db,raws);
+      await clearStore(db, STORE_CHECKOUTS);
+      await setMeta(db, 'lastFetchedDate', new Date().toISOString());
+      await saveRawRecords(db, rawRecords);
     }
-    const books=raws.map(processRaw).sort((a,b)=>a.realDueMs-b.realDueMs);
-    grid.innerHTML='';
-    books.forEach((b,i)=>{
-      const card=document.createElement('div');card.className='book-card';card.dataset.index=i;
-      card.innerHTML=summaryTemplate(b,i);
-      card.addEventListener('click',()=>{
-        if(card.classList.contains('expanded')){card.classList.remove('expanded');card.innerHTML=summaryTemplate(b,i);} else{card.classList.add('expanded');card.innerHTML=detailTemplate(b);} });
+
+    const books = rawRecords
+      .map(processRaw)
+      .sort((a, b) => a.realDueMs - b.realDueMs);
+
+    grid.innerHTML = '';
+    books.forEach((b, i) => {
+      const card = document.createElement('div');
+      card.className = 'book-card';
+      let downPos = null;
+      card.addEventListener('pointerdown', e => { downPos = { x: e.clientX, y: e.clientY }; });
+      card.addEventListener('pointerup', e => {
+        if (!downPos) return;
+        const dx = e.clientX - downPos.x;
+        const dy = e.clientY - downPos.y;
+        if (Math.hypot(dx, dy) < 5) {
+          if (card.classList.contains('expanded')) {
+            card.classList.remove('expanded');
+            card.innerHTML = summaryTemplate(b, i);
+          } else {
+            card.classList.add('expanded');
+            card.innerHTML = detailTemplate(b);
+          }
+        }
+        downPos = null;
+      });
+      card.innerHTML = summaryTemplate(b, i);
       grid.appendChild(card);
     });
-  }catch(e){grid.textContent='Error loading checkouts.';console.error(e);} }
-$('#see-checkouts-btn').addEventListener('click',()=>loadAndRenderCheckouts());
-$('#refresh-btn').addEventListener('click',()=>loadAndRenderCheckouts({force:true}));
+
+  } catch (err) {
+    grid.textContent = 'Error loading checkouts.';
+    console.error(err);
+  }
+}
+
+$('#see-checkouts-btn').addEventListener('click', () => loadAndRenderCheckouts());
+$('#refresh-btn').addEventListener('click', () => loadAndRenderCheckouts({ force: true }));
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 renderAccounts();
