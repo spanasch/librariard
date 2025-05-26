@@ -1,7 +1,7 @@
 {
   "name": "Librariard",
   "short_name": "Librariard",
-  "start_url": "/",
+  "start_url": "https://spanasch.github.io/librariard/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3367D6",

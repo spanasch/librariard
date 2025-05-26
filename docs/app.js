@@ -221,17 +221,18 @@ function summaryTemplate(b, idx) {
       : b.dueWithin2Wks
         ? 'darkblue'
         : 'black';
-  const badges = [
-    b.overdue ? '<span class="badge">!</span>' : '',
-    b.renewsLeft > 0 ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : ''
-  ].join('');
+  // build badges: renew first, then overdue
+  const renewBadge = b.renewsLeft > 0 ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : '';
+  const overdueBadge = b.overdue ? '<span class="badge">!</span>' : '';
   return `
     <div class="card-header" style="background-color:${headerColor}; color:white;">
       <div class="header-left">
         <span class="index">${idx + 1}</span>
         <span class="date">${b.displayDate}</span>
       </div>
-      ${badges}
+      <div class="header-right">
+        ${renewBadge}${overdueBadge}
+      </div>
     </div>
     <div class="card-body">
       <img src="${b.cover}" alt="Cover of ${b.title}">
