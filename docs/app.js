@@ -1,6 +1,6 @@
 /*
   Librariard PWA - app.js
-  Updated: display calculated real due date, new header colors, formatted dates, and overdue badge
+  Updated: store accountName, toggle detail view on card click
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -162,11 +162,13 @@ function isSameDay(isoDateStr) {
 // ── Data extraction & processing ─────────────────────────────────────────────
 function extractRawBooks(json, acct) {
   const arr = [];
+  const accountName = acct.displayName || acct.accountId;
   for (const chk of Object.values(json.entities.checkouts)) {
     const meta = json.entities.bibs[chk.metadataId].briefInfo;
     arr.push({
       id:            `${acct.accountId}_${chk.metadataId}`,
       accountId:     acct.accountId,
+      accountName,
       metadataId:    chk.metadataId,
       timesRenewed:  chk.timesRenewed || 0,
       dueDate:       chk.dueDate,
@@ -187,19 +189,61 @@ function processRaw(rec) {
   const dueWithinWeek = diffMs >= 0 && diffMs < 7 * 24 * 3600 * 1000;
   const dueWithin2Wks = diffMs >= 0 && diffMs < 14 * 24 * 3600 * 1000;
   const realDueDate   = new Date(realDueMs);
-
-  // format as M/D
   const fmtDate       = `${realDueDate.getMonth()+1}/${realDueDate.getDate()}`;
 
   return {
     ...rec,
     renewsLeft,
     realDueMs,
-    overdue:    diffMs < 0,
+    overdue:      diffMs < 0,
     dueWithinWeek,
     dueWithin2Wks,
-    displayDate: fmtDate
+    displayDate:  fmtDate
   };
+}
+
+// ── Templates ───────────────────────────────────────────────────────────────
+function summaryTemplate(b, i) {
+  const headerColor = b.overdue
+    ? 'darkred'
+    : b.dueWithinWeek
+      ? 'darkorange'
+      : b.dueWithin2Wks
+        ? 'darkblue'
+        : 'black';
+  const badge = b.overdue
+    ? '<span class="badge">!</span>'
+    : (b.renewsLeft > 0)
+      ? `<span class="badge">Renews: ${b.renewsLeft}</span>`
+      : '';
+  return `
+    <div class="card-header" style="background-color:${headerColor}; color:white;">
+      <div class="header-left">
+        <span class="index">${i + 1}</span>
+        <span class="date">${b.displayDate}</span>
+      </div>
+      ${badge}
+    </div>
+    <div class="card-body">
+      <img src="${b.cover}" alt="Cover of ${b.title}">
+      <h2>${b.title}</h2>
+    </div>
+  `;
+}
+
+function detailTemplate(b) {
+  return `
+    <div class="card-header" style="background-color:gray; color:white;">
+      <span>Details</span>
+    </div>
+    <div class="card-detail">
+      <p><strong>Title:</strong> ${b.title}</p>
+      <p><strong>Original Due:</strong> ${b.dueDate.split('T')[0]}</p>
+      <p><strong>Real Due:</strong> ${b.displayDate}</p>
+      <p><strong>Renews Left:</strong> ${b.renewsLeft}</p>
+      <p><strong>Account:</strong> ${b.accountName}</p>
+    </div>
+  `;
 }
 
 // ── Load & render checkouts ───────────────────────────────────────────────────
@@ -230,39 +274,24 @@ async function loadAndRenderCheckouts({ force = false } = {}) {
       .map(processRaw)
       .sort((a, b) => a.realDueMs - b.realDueMs);
 
-    grid.innerHTML = books.map((b, i) => {
-      // header color logic
-      const headerColor = b.overdue
-        ? 'darkred'
-        : b.dueWithinWeek
-          ? 'darkorange'
-          : b.dueWithin2Wks
-            ? 'darkblue'
-            : 'black';
-
-      // badge: exclamation if overdue, else renew count if >0
-      const badge = b.overdue
-        ? '<span class="badge">!</span>'
-        : (b.renewsLeft > 0)
-          ? `<span class="badge">Renews: ${b.renewsLeft}</span>`
-          : '';
-
-      return `
-        <div class="book-card">
-          <div class="card-header" style="background-color:${headerColor}; color:white;">
-            <div class="header-left">
-              <span class="index">${i + 1}</span>
-              <span class="date">${b.displayDate}</span>
-            </div>
-            ${badge}
-          </div>
-          <div class="card-body">
-            <img src="${b.cover}" alt="Cover of ${b.title}">
-            <h2>${b.title}</h2>
-          </div>
-        </div>
-      `;
-    }).join('');
+    // render summaries
+    books.forEach((b, i) => {
+      const card = document.createElement('div');
+      card.className = 'book-card';
+      card.dataset.index = i;
+      card.innerHTML = summaryTemplate(b, i);
+      // click to toggle
+      card.addEventListener('click', () => {
+        if (card.classList.contains('expanded')) {
+          card.classList.remove('expanded');
+          card.innerHTML = summaryTemplate(b, i);
+        } else {
+          card.classList.add('expanded');
+          card.innerHTML = detailTemplate(b);
+        }
+      });
+      grid.appendChild(card);
+    });
 
   } catch (err) {
     grid.textContent = 'Error loading checkouts.';
