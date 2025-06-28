@@ -7,6 +7,8 @@
     - Show both overdue (!) and renew badges when applicable
     - Improve loading messages per account
     - Toggle detail view on tap/click ignoring drags
+    - Load cached checkouts immediately while refreshing in the background.
+    - Disable refresh button during background refresh.
 */
 
 const LOGIN_URL    = "https://aclibrary.bibliocommons.com/user/login?destination=%2Faccount%2Fcontact_preferences";
@@ -158,6 +160,7 @@ function getAllRaw(db) {
 }
 
 function isSameDay(isoDateStr) {
+  if (!isoDateStr) return false;
   const d1 = new Date(isoDateStr);
   const d2 = new Date();
   return d1.getFullYear() === d2.getFullYear() &&
@@ -169,6 +172,8 @@ function isSameDay(isoDateStr) {
 function extractRawBooks(json, acct) {
   const arr = [];
   const accountName = acct.displayName || acct.accountId;
+  // Handle cases where the API returns no checkouts for an account
+  if (!json.entities || !json.entities.checkouts) return [];
   Object.values(json.entities.checkouts).forEach(chk => {
     const meta = json.entities.bibs[chk.metadataId].briefInfo;
     arr.push({
@@ -191,7 +196,6 @@ function processRaw(rec) {
   const [y, m, d]      = rec.dueDate.split('T')[0].split('-').map(Number);
   const originalMs     = new Date(y, m - 1, d).getTime();
   const renewsLeft     = Math.max(0, MAX_RENEWS - rec.timesRenewed);
-  // if original is past, don't add renewals
   const realDueMs      = originalMs < todayMs
     ? originalMs
     : originalMs + renewsLeft * 21 * 24 * 3600 * 1000;
@@ -221,7 +225,6 @@ function summaryTemplate(b, idx) {
       : b.dueWithin2Wks
         ? 'darkblue'
         : 'black';
-  // build badges: renew first, then overdue
   const renewBadge = b.renewsLeft > 0 ? `<span class="badge">Renews: ${b.renewsLeft}</span>` : '';
   const overdueBadge = b.overdue ? '<span class="badge">!</span>' : '';
   return `
@@ -256,35 +259,9 @@ function detailTemplate(b) {
   `;
 }
 
-// ── Load & render checkouts ───────────────────────────────────────────────────
-async function loadAndRenderCheckouts({ force = false } = {}) {
-  show('#checkouts-view');
-  const grid = $('#books-grid');
-  grid.innerHTML = '';
-
-  try {
-    const db        = await openDB();
-    const lastFetch = await getMeta(db, 'lastFetchedDate');
-    let rawRecords  = [];
-
-    if (!force && lastFetch && isSameDay(lastFetch)) {
-      rawRecords = await getAllRaw(db);
-    } else {
-      const accts = getAccounts();
-      for (const acct of accts) {
-        grid.textContent = `Loading checkouts for ${acct.displayName || acct.accountId}…`;
-        const json = await fetchCheckoutsViaProxy(acct);
-        rawRecords.push(...extractRawBooks(json, acct));
-      }
-      await clearStore(db, STORE_CHECKOUTS);
-      await setMeta(db, 'lastFetchedDate', new Date().toISOString());
-      await saveRawRecords(db, rawRecords);
-    }
-
-    const books = rawRecords
-      .map(processRaw)
-      .sort((a, b) => a.realDueMs - b.realDueMs);
-
+// ── Render checkouts ────────────────────────────────────────────────────────
+function renderBooks(books) {
+    const grid = $('#books-grid');
     grid.innerHTML = '';
     books.forEach((b, i) => {
       const card = document.createElement('div');
@@ -309,10 +286,71 @@ async function loadAndRenderCheckouts({ force = false } = {}) {
       card.innerHTML = summaryTemplate(b, i);
       grid.appendChild(card);
     });
+}
+
+// ── Load & render checkouts ───────────────────────────────────────────────────
+let isRefreshing = false;
+
+async function loadAndRenderCheckouts({ force = false } = {}) {
+  show('#checkouts-view');
+  const grid = $('#books-grid');
+  const refreshBtn = $('#refresh-btn');
+  const loadingStatus = $('#loading-status');
+
+  // --- 1. Immediate render from cache ---
+  try {
+    const db = await openDB();
+    const cachedRawRecords = await getAllRaw(db);
+    if (cachedRawRecords.length > 0) {
+      const books = cachedRawRecords.map(processRaw).sort((a, b) => a.realDueMs - b.realDueMs);
+      renderBooks(books);
+    } else {
+      grid.textContent = 'No checkouts found. Try refreshing.';
+    }
+  } catch(err) {
+    console.error("Error loading from cache:", err);
+    grid.textContent = 'Could not load checkout data.';
+  }
+
+  // --- 2. Check if a background refresh is needed ---
+  if (isRefreshing) return;
+
+  const db = await openDB();
+  const lastFetch = await getMeta(db, 'lastFetchedDate');
+  const needsRefresh = force || !isSameDay(lastFetch);
+
+  if (!needsRefresh) return;
+
+  // --- 3. Start background refresh ---
+  try {
+    isRefreshing = true;
+    refreshBtn.disabled = true;
+    loadingStatus.textContent = 'Updating...';
+
+    const newRawRecords = [];
+    const accts = getAccounts();
+    for (const acct of accts) {
+      loadingStatus.textContent = `Loading checkouts for ${acct.displayName || acct.accountId}…`;
+      const json = await fetchCheckoutsViaProxy(acct);
+      newRawRecords.push(...extractRawBooks(json, acct));
+    }
+
+    // --- 4. Update DB and re-render with fresh data ---
+    await clearStore(db, STORE_CHECKOUTS);
+    await setMeta(db, 'lastFetchedDate', new Date().toISOString());
+    await saveRawRecords(db, newRawRecords);
+
+    const updatedBooks = newRawRecords.map(processRaw).sort((a, b) => a.realDueMs - b.realDueMs);
+    renderBooks(updatedBooks);
+    loadingStatus.textContent = ''; // Clear status on success
 
   } catch (err) {
-    grid.textContent = 'Error loading checkouts.';
+    loadingStatus.textContent = 'Error refreshing checkouts.';
     console.error(err);
+  } finally {
+    // --- 5. Cleanup ---
+    isRefreshing = false;
+    refreshBtn.disabled = false;
   }
 }
 
