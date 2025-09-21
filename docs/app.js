@@ -82,7 +82,24 @@ async function fetchCheckoutsViaProxy(acct) {
   }).toString();
 
   const backendUrl = window.BACKEND_URL || "http://localhost:5000";
-  const res        = await fetch(`${backendUrl}/checkouts?${query}`);
+  const url        = `${backendUrl}/checkouts?${query}`;
+
+  // Log queries: masked by default. To log the full sensitive URL, set `window.LOG_FULL_QUERIES = true`.
+  try {
+    const maskedParams = new URLSearchParams({
+      name:      acct.cardNumber ? String(acct.cardNumber).replace(/\d(?=\d{4})/g, 'x') : '',
+      user_pin:  acct.pin ? '****' : '',
+      accountId: acct.accountId
+    }).toString();
+    console.log('[Librariard] Requesting checkouts:', `${backendUrl}/checkouts?${maskedParams}`);
+    if (window.LOG_FULL_QUERIES) {
+      console.warn('[Librariard] FULL request URL (contains sensitive info):', url);
+    }
+  } catch (logErr) {
+    // Swallow logging errors to avoid impacting functionality
+  }
+
+  const res        = await fetch(url);
   return res.json();
 }
 
